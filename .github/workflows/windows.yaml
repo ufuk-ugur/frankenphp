@@ -1,20 +1,13 @@
 ---
-name: Build Windows release
+# Ranetra: FrankenPHP for Windows linked against PHP 8.4 (thread-safe) instead of the latest PHP,
+# because the phpBolt loader has no Windows build for PHP 8.5. Run by hand; uploads an artifact only.
+name: Build Windows (PHP 8.4)
 
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    tags:
-      - v*.*.*
   workflow_dispatch:
     inputs:
       #checkov:skip=CKV_GHA_7
@@ -22,8 +15,6 @@ on:
         description: "FrankenPHP version"
         required: false
         type: string
-  schedule:
-    - cron: "0 8 * * *"
 
 permissions:
   contents: read
@@ -40,10 +31,7 @@ env:
 jobs:
   build:
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
+      contents: read
     runs-on: windows-latest
     steps:
       - name: Determine ref
@@ -73,7 +61,7 @@ jobs:
       - id: version
         uses: ./frankenphp/.github/actions/version
         with:
-          ref: ${{ env.REF }}
+          ref: v1.13.5
 
       - name: Setup Go
         uses: ./frankenphp/.github/actions/setup-go
@@ -123,7 +111,7 @@ jobs:
         run: |
           $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
           # Rebuilt binaries get a build number suffix, e.g. php-8.5.12-1-Win32-vs17-x64.zip
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+(-\d+)?-Win32-vs17-x64\.zip$" }
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-8\.4\.\d+(-\d+)?-Win32-vs17-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
 
@@ -230,21 +218,6 @@ jobs:
           name: ${{ env.DIR_NAME }}
           path: ${{ env.DIR_NAME }}
           if-no-files-found: error
-
-      - name: Zip Release Artifact
-        if: ${{ env.REF }}
-        run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
-
-      - name: Upload Release Asset
-        if: ${{ env.REF }}
-        run: gh release upload "$env:REF" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - if: ${{ env.REF }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
 
       - name: Run Tests
         run: |
